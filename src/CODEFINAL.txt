@@ -1,0 +1,494 @@
+imem
+
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 12.03.2026 10:33:24
+// Design Name: 
+// Module Name: imm_gen
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+//////////////////////////////////////////////////////////////////////////////////
+
+module imem(
+input [31:0] addr,
+output [31:0] instruction
+);
+
+reg [31:0] memory [0:63];
+
+initial
+begin
+memory[0] = 32'h00500093;
+memory[1] = 32'h00a00113;
+memory[2] = 32'h002081b3;
+memory[3] = 32'h00000013;
+end
+
+assign instruction = memory[addr[7:2]];
+
+endmodule
+
+2.control
+
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 12.03.2026 10:33:24
+// Design Name: 
+// Module Name: imm_gen
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+//////////////////////////////////////////////////////////////////////////////////
+
+module control(
+input [6:0] opcode,
+input [2:0] funct3,
+input [6:0] funct7,
+
+output reg regwrite,
+output reg memread,
+output reg memwrite,
+output reg alusrc,
+output reg branch,
+output reg [3:0] alucontrol
+);
+
+always @(*)
+begin
+
+regwrite = 0;
+memread = 0;
+memwrite = 0;
+alusrc = 0;
+branch = 0;
+alucontrol = 4'b0000;
+
+case(opcode)
+
+7'b0110011:
+begin
+regwrite = 1;
+
+case({funct7,funct3})
+
+10'b0000000000: alucontrol = 4'b0000;
+10'b0100000000: alucontrol = 4'b0001;
+10'b0000000111: alucontrol = 4'b0010;
+10'b0000000110: alucontrol = 4'b0011;
+
+endcase
+end
+
+7'b0010011:
+begin
+regwrite = 1;
+alusrc = 1;
+alucontrol = 4'b0000;
+end
+
+7'b0000011:
+begin
+regwrite = 1;
+memread = 1;
+alusrc = 1;
+alucontrol = 4'b0000;
+end
+
+7'b0100011:
+begin
+memwrite = 1;
+alusrc = 1;
+alucontrol = 4'b0000;
+end
+
+7'b1100011:
+begin
+branch = 1;
+alucontrol = 4'b0001;
+end
+
+endcase
+
+end
+
+endmodule
+
+3.regfile 
+
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 12.03.2026 10:33:24
+// Design Name: 
+// Module Name: imm_gen
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+//////////////////////////////////////////////////////////////////////////////////
+
+module regfile(
+input clk,
+input regwrite,
+input [4:0] rs1,
+input [4:0] rs2,
+input [4:0] rd,
+input [31:0] writedata,
+output [31:0] rd1,
+output [31:0] rd2
+);
+
+reg [31:0] registers [0:31];
+integer i;
+
+initial
+begin
+for(i=0;i<32;i=i+1)
+registers[i] = 0;
+end
+
+assign rd1 = registers[rs1];
+assign rd2 = registers[rs2];
+
+always @(posedge clk)
+begin
+if(regwrite && rd!=0)
+registers[rd] <= writedata;
+end
+
+endmodule
+
+4. immegen
+
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 12.03.2026 10:33:24
+// Design Name: 
+// Module Name: imm_gen
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+/////////////////////////////////////////////////////////////////////////////
+
+module imm_gen(
+input [31:0] instruction,
+output reg [31:0] imm
+);
+
+always @(*)
+begin
+
+case(instruction[6:0])
+
+7'b0010011,
+7'b0000011:
+imm = {{20{instruction[31]}},instruction[31:20]};
+
+7'b0100011:
+imm = {{20{instruction[31]}},instruction[31:25],instruction[11:7]};
+
+7'b1100011:
+imm = {{19{instruction[31]}},
+instruction[31],
+instruction[7],
+instruction[30:25],
+instruction[11:8],
+1'b0};
+
+default:
+imm = 0;
+
+endcase
+
+end
+
+endmodule
+
+5. alu 
+
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 12.03.2026 10:33:24
+// Design Name: 
+// Module Name: imm_gen
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+//////////////////////////////////////////////////////////////////////////////////
+module alu(
+input [31:0] A,
+input [31:0] B,
+input [3:0] alucontrol,
+output reg [31:0] result,
+output zero
+);
+
+always @(*)
+begin
+case(alucontrol)
+
+4'b0000: result = A + B;
+4'b0001: result = A - B;
+4'b0010: result = A & B;
+4'b0011: result = A | B;
+
+default: result = 0;
+
+endcase
+end
+
+assign zero = (result == 0);
+
+endmodule
+
+7.dmem
+
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 12.03.2026 10:33:24
+// Design Name: 
+// Module Name: imm_gen
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+//////////////////////////////////////////////////////////////////////////////////
+
+module dmem(
+input clk,
+input memread,
+input memwrite,
+input [31:0] addr,
+input [31:0] writedata,
+output [31:0] readdata
+);
+
+reg [31:0] memory [0:63];
+
+always @(posedge clk)
+begin
+if(memwrite)
+memory[addr[7:2]] <= writedata;
+end
+
+assign readdata = memread ? memory[addr[7:2]] : 0;
+
+endmodule
+
+8.CPU
+
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 12.03.2026 10:33:24
+// Design Name: 
+// Module Name: imm_gen
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+//////////////////////////////////////////////////////////////////////////////////
+module cpu(
+input clk,
+input rst,
+output [31:0] result
+);
+
+reg [31:0] pc;
+
+wire [31:0] instruction;
+wire [31:0] imm;
+wire [31:0] rd1, rd2;
+wire [31:0] alu_out;
+wire [31:0] mem_data;
+wire [31:0] writeback;
+
+wire regwrite;
+wire memread;
+wire memwrite;
+wire alusrc;
+wire branch;
+wire [3:0] alucontrol;
+wire zero;
+
+wire [4:0] rs1 = instruction[19:15];
+wire [4:0] rs2 = instruction[24:20];
+wire [4:0] rd  = instruction[11:7];
+
+always @(posedge clk or posedge rst)
+begin
+if(rst)
+pc <= 0;
+else if(branch && zero)
+pc <= pc + imm;
+else
+pc <= pc + 4;
+end
+
+imem IM(pc, instruction);
+
+control CTRL(
+instruction[6:0],
+instruction[14:12],
+instruction[31:25],
+regwrite,
+memread,
+memwrite,
+alusrc,
+branch,
+alucontrol
+);
+
+regfile RF(
+clk,
+regwrite,
+rs1,
+rs2,
+rd,
+writeback,
+rd1,
+rd2
+);
+
+imm_gen IMM(instruction, imm);
+
+wire [31:0] srcB;
+
+assign srcB = alusrc ? imm : rd2;
+
+alu ALU(
+rd1,
+srcB,
+alucontrol,
+alu_out,
+zero
+);
+
+dmem DM(
+clk,
+memread,
+memwrite,
+alu_out,
+rd2,
+mem_data
+);
+
+assign writeback = memread ? mem_data : alu_out;
+
+assign result = writeback;
+
+endmodule
+
+9.TOP
+
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 12.03.2026 10:31:45
+// Design Name: 
+// Module Name: top
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+//////////////////////////////////////////////////////////////////////////////////
+
+module top(
+input clk,
+input rst,
+output [15:0] led
+);
+
+wire [31:0] result;
+
+cpu CPU(
+.clk(clk),
+.rst(rst),
+.result(result)
+);
+
+assign led = result[15:0];
+
+endmodule
